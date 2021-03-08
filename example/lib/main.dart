@@ -18,7 +18,7 @@ class MyApp extends StatelessWidget {
 }
 
 class MyHomePage extends StatefulWidget {
-  MyHomePage({Key key, this.title}) : super(key: key);
+  MyHomePage({this.title = ""}) : super();
 
   final String title;
 
@@ -57,10 +57,10 @@ class _MyHomePageState extends State<MyHomePage> {
             apiKey: "6LeCwZYUAAAAAJo8IVvGX9dH65Rw89vxaxErCeou",
             apiSecret: "6LeCwZYUAAAAAKGahIjwfOARevvRETgvwhPMKCs_",
             controller: recaptchaV2Controller,
-            onVerifiedError: (err){
+            onVerifiedError: (err, msg) {
               print(err);
             },
-            onVerifiedSuccessfully: (success) {
+            onVerifiedSuccessfully: (success, msg) {
               setState(() {
                 if (success) {
                   verifyResult = "You've been verified successfully.";

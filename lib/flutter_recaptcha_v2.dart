@@ -1,10 +1,12 @@
 library flutter_recaptcha_v2;
 
-import 'package:webview_flutter/webview_flutter.dart';
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
+import 'package:webview_flutter/webview_flutter.dart';
 
 typedef ValueValueChanged<T, U> = void Function(T t, U u);
 
@@ -20,28 +22,28 @@ class RecaptchaV2 extends StatefulWidget {
   final ValueValueChanged<String, String> onVerifiedError;
 
   RecaptchaV2({
-    this.apiKey,
-    this.apiSecret,
+    required this.apiKey,
+    this.apiSecret = "",
     this.pluginURL: "https://recaptcha-flutter-plugin.firebaseapp.com/",
     this.visibleCancelButton: false,
     this.textCancelButton: "CANCEL CAPTCHA",
-    RecaptchaV2Controller controller,
-    this.onVerifiedSuccessfully,
-    this.onVerifiedError,
-  })  : controller = controller ?? RecaptchaV2Controller(),
-    assert(apiKey != null, "Google ReCaptcha API KEY is missing.");
+    required this.controller,
+    required this.onVerifiedSuccessfully,
+    required this.onVerifiedError,
+  }) : assert(apiKey.isNotEmpty, "Google ReCaptcha API KEY is missing.");
 
   @override
   State<StatefulWidget> createState() => _RecaptchaV2State();
 }
 
 class _RecaptchaV2State extends State<RecaptchaV2> {
-  RecaptchaV2Controller controller;
-  WebViewController webViewController;
+  final Completer<WebViewController> _controller = Completer<WebViewController>();
 
   void verifyToken(String token) async {
-    if (widget.apiSecret != null) {
-      String url = "https://www.google.com/recaptcha/api/siteverify";
+    if (widget.apiSecret.isEmpty) {
+      widget.onVerifiedSuccessfully(true, token);
+    } else {
+      Uri url = Uri.parse("https://www.google.com/recaptcha/api/siteverify");
       http.Response response = await http.post(url, body: {
         "secret": widget.apiSecret,
         "response": token,
@@ -56,30 +58,27 @@ class _RecaptchaV2State extends State<RecaptchaV2> {
           widget.onVerifiedError(json['error-codes'].toString(), token);
         }
       }
-    } else {
-      widget.onVerifiedSuccessfully(true, token);
     }
 
     // hide captcha
-    controller.hide();
+    widget.controller.hide();
   }
 
   void onListen() {
-    if (controller.visible) {
-      if (webViewController != null) {
-        webViewController.clearCache();
-        webViewController.reload();
-      }
+    if (widget.controller.visible) {
+      _controller.future.then((WebViewController con) {
+        con.clearCache();
+        con.reload();
+      });
     }
     setState(() {
-      controller.visible;
+      widget.controller.visible;
     });
   }
 
   @override
   void initState() {
-    controller = widget.controller;
-    controller.addListener(onListen);
+    widget.controller.addListener(onListen);
     super.initState();
   }
 
@@ -87,22 +86,21 @@ class _RecaptchaV2State extends State<RecaptchaV2> {
   void didUpdateWidget(RecaptchaV2 oldWidget) {
     if (widget.controller != oldWidget.controller) {
       oldWidget.controller.removeListener(onListen);
-      controller = widget.controller;
-      controller.removeListener(onListen);
+      widget.controller.removeListener(onListen);
     }
     super.didUpdateWidget(oldWidget);
   }
 
   @override
   void dispose() {
-    controller.removeListener(onListen);
-    controller.dispose();
+    widget.controller.removeListener(onListen);
+    widget.controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return controller.visible
+    return widget.controller.visible
         ? Stack(
             children: <Widget>[
               WebView(
@@ -120,8 +118,8 @@ class _RecaptchaV2State extends State<RecaptchaV2> {
                     },
                   ),
                 ].toSet(),
-                onWebViewCreated: (_controller) {
-                  webViewController = _controller;
+                onWebViewCreated: (WebViewController webViewController) {
+                  _controller.complete(webViewController);
                 },
               ),
               Visibility(
@@ -134,20 +132,18 @@ class _RecaptchaV2State extends State<RecaptchaV2> {
                       mainAxisSize: MainAxisSize.max,
                       children: <Widget>[
                         Expanded(
-                          child: RaisedButton(
+                          child: ElevatedButton(
                             child: Text(widget.textCancelButton),
                             onPressed: () {
-                              controller.hide();
+                              widget.controller.hide();
                             },
                           ),
                         ),
                       ],
                     ),
+                  ),
                 ),
               ),
-
-              ),
-
             ],
           )
         : Container();
@@ -159,6 +155,7 @@ class RecaptchaV2Controller extends ChangeNotifier {
   List<VoidCallback> _listeners = [];
 
   bool _visible = false;
+
   bool get visible => _visible;
 
   void show() {
